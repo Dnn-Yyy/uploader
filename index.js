@@ -8,7 +8,7 @@ const mime = require('mime-types');
 const app = express();
 const port = 3000;
 const githubToken = `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`; // https://github.com/settings/tokens
-const owner = 'cihuy444'; // GitHub username
+const owner = 'cihuyy444'; // GitHub username
 const repo = 'databaseUploader'; // Repository name
 const branch = 'main';
 
