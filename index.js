@@ -1,115 +1,211 @@
-//.
-const express = require('express');
-const fileUpload = require('express-fileupload');
-const axios = require('axios');
-const fs = require('fs');
-const mime = require('mime-types');
+const express = require('express')
+const fileUpload = require('express-fileupload')
+const axios = require('axios')
+const mime = require('mime-types')
 
-const app = express();
-const port = 3000;
-const githubToken = `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`; // https://github.com/settings/tokens
-const owner = 'cihuyy444'; // GitHub username
-const repo = 'databaseUploader'; // Repository name
-const branch = 'main';
+const app = express()
+const port = process.env.PORT || 3000
 
-app.use(fileUpload());
+const githubToken = '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'
+const owner = 'cihuyy444'
+const repo = 'databaseUploader'
+const branch = 'main'
+const domain = 'https://uploader-gray.vercel.app'
+
+app.use(fileUpload())
+app.use(express.static(__dirname))
+
+async function ensureUploadsFolder() {
+  try {
+    await axios.get(`https://api.github.com/repos/${owner}/${repo}/contents/uploads`, {
+      headers: { Authorization: `Bearer ${githubToken}` }
+    })
+  } catch (err) {
+    if (err.response?.status === 404) {
+      await axios.put(
+        `https://api.github.com/repos/${owner}/${repo}/contents/uploads/.gitkeep`,
+        {
+          message: 'Create uploads folder',
+          content: Buffer.from('').toString('base64'),
+          branch: branch
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${githubToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+    }
+  }
+}
 
 app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/index.html');
-});
+  res.sendFile(__dirname + '/index.html')
+})
 
-app.post('/upload', async (req, res) => {
-  if (!req.files || Object.keys(req.files).length === 0) {
-    return res.status(400).send('No files were uploaded.');
+app.post('/api/upload', async (req, res) => {
+  if (!req.files || !req.files.file) {
+    return res.status(400).json({ status: false, message: 'No file uploaded.' })
   }
 
-  let uploadedFile = req.files.file;
-  let mimeType = mime.lookup(uploadedFile.name);
-  let fileName = `${Date.now()}.${mime.extension(mimeType)}`;
-  let filePath = `uploads/${fileName}`;
-  let base64Content = Buffer.from(uploadedFile.data).toString('base64');
+  const uploadedFile = req.files.file
+  const mimeType = mime.lookup(uploadedFile.name) || 'application/octet-stream'
+  const fileExt = mime.extension(mimeType)
+  const fileName = `${Date.now()}.${fileExt}`
+  const filePath = `uploads/${fileName}`
+  const base64Content = Buffer.from(uploadedFile.data).toString('base64')
 
   try {
-    let response = await axios.put(`https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`, {
-      message: `Upload file ${fileName}`,
-      content: base64Content,
-      branch: branch,
-    }, {
-      headers: {
-        Authorization: `Bearer ${githubToken}`,
-        'Content-Type': 'application/json',
+    await axios.put(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
+      {
+        message: `Upload file ${fileName}`,
+        content: base64Content,
+        branch: branch
       },
-    });
+      {
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    )
 
-    let rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${filePath}`;
-    // YAYAYAYYAYAYAYAYAYAYYAYAYYAYYAYAYAYAA
-    res.send(`
-    <!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unggahan Berhasil</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="icon" type="image/x-icon" href="https://i.pinimg.com/736x/0d/71/2a/0d712a0b6805c0b44386339048bdfce5.jpg?format=png&name=900x900">
-    <style>
-        /* Custom styles for a more modern look */
-        body {
-            background-image: linear-gradient(to right top, #d16ba5, #c777b9, #ba83ca, #aa8fd8, #9a9ae1, #8aa7ec, #79b3f4, #69bff8, #52cffe, #41dfff, #46eefa, #5ffbf1);
-            background-size: cover;
-            background-attachment: fixed;
-        }
-        .card-glow {
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05), 0 0 30px rgba(124, 58, 237, 0.6); /* Purple glow */
-            transition: all 0.3s ease-in-out;
-        }
-        .card-glow:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 20px -5px rgba(0, 0, 0, 0.1), 0 6px 8px -3px rgba(0, 0, 0, 0.08), 0 0 40px rgba(167, 139, 250, 0.8); /* Lighter purple on hover */
-        }
-    </style>
-</head>
-<body class="flex flex-col items-center justify-center min-h-screen p-4">
-    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md card-glow transform hover:scale-105 transition duration-300">
-        <div class="mb-6">
-            <img src="https://media.tenor.com/yWaLIc5J9WgAAAAj/momoi.gif" alt="Momoi GIF" class="mx-auto rounded-full h-32 w-32 object-cover shadow-lg border-4 border-indigo-300">
-        </div>
-        <h1 class="text-3xl font-extrabold text-center mb-4 text-gray-800">Unggahan Berhasil!</h1>
-        <div class="text-center text-gray-600 mb-6 text-md">
-            File Anda berhasil diunggah. Berikut adalah tautan URL langsungnya:
-        </div>
-        <div class="text-center mb-6 p-3 bg-gray-100 rounded-lg break-words shadow-inner">
-            <a id="rawUrlLink" href="${rawUrl}" class="text-indigo-600 hover:text-indigo-800 font-semibold text-lg transition duration-200 ease-in-out">${rawUrl}</a>
-        </div>
-        <div class="text-center">
-            <button onclick="copyUrl()" class="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700
-                text-white font-bold py-3 px-8 rounded-full shadow-lg
-                transform hover:scale-105 transition duration-300 ease-in-out
-                focus:outline-none focus:ring-4 focus:ring-purple-300">
-                Salin URL
-            </button>
-        </div>
-    </div>
-
-    <script>
-        function copyUrl() {
-            const rawUrl = document.getElementById('rawUrlLink').href;
-            navigator.clipboard.writeText(rawUrl).then(function() {
-                alert("URL berhasil disalin: " + rawUrl);
-            }).catch(function(error) {
-                alert("Gagal menyalin URL: " + error);
-            });
-        }
-    </script>
-</body>
-</html>
-`);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Error uploading file.');
+    const proxiedUrl = `${domain}/uploads/${fileName}`
+    res.json({
+      status: true,
+      message: 'Upload berhasil',
+      url: proxiedUrl
+    })
+  } catch (err) {
+    console.error(err.response?.data || err.message)
+    res.status(500).json({
+      status: false,
+      message: 'Gagal upload file.'
+    })
   }
-});
+})
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
+app.post('/upload', async (req, res) => {
+  if (!req.files || !req.files.file) {
+    return res.status(400).send('Tidak ada file yang diupload.')
+  }
+
+  const uploadedFile = req.files.file
+  const mimeType = mime.lookup(uploadedFile.name) || 'application/octet-stream'
+  const fileExt = mime.extension(mimeType)
+  const fileName = `${Date.now()}.${fileExt}`
+  const filePath = `uploads/${fileName}`
+  const base64Content = Buffer.from(uploadedFile.data).toString('base64')
+
+  try {
+    await axios.put(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
+      {
+        message: `Upload file ${fileName}`,
+        content: base64Content,
+        branch: branch
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    )
+
+    const proxiedUrl = `${domain}/uploads/${fileName}`
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en" class="dark">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>Upload Berhasil</title>
+        <link rel="icon" type="image/png" href="/logo.png">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+        <style>
+          body {
+            font-family: 'Poppins', sans-serif;
+            background: #0f172a;
+          }
+          .glass {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(14px);
+          }
+        </style>
+      </head>
+      <body class="text-white flex justify-center items-center min-h-screen">
+        <div class="glass p-8 rounded-2xl shadow-2xl max-w-lg w-full text-center">
+          <h1 class="text-3xl font-bold text-green-400 mb-4">✅ Upload Berhasil</h1>
+          <p class="text-gray-300 mb-2">Link File:</p>
+          <a href="${proxiedUrl}" target="_blank" class="text-blue-400 underline break-all">${proxiedUrl}</a>
+          <div class="mt-6 flex justify-center gap-3">
+            <button onclick="navigator.clipboard.writeText('${proxiedUrl}').then(()=>alert('✅ URL berhasil disalin'))" class="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg font-semibold">Copy URL</button>
+            <a href="/" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg font-semibold">Back</a>
+          </div>
+        </div>
+      </body>
+      </html>
+    `)
+  } catch (err) {
+    console.error(err.response?.data || err.message)
+    res.status(500).send('Gagal upload file.')
+  }
+})
+
+app.get('/uploads/:filename', async (req, res) => {
+  const githubRawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/uploads/${req.params.filename}`
+  try {
+    const mimeType = mime.lookup(req.params.filename) || 'application/octet-stream'
+
+    const fileStream = await axios({
+      method: 'GET',
+      url: githubRawUrl,
+      responseType: 'arraybuffer'
+    })
+
+    if (mimeType.startsWith('video/') || mimeType.startsWith('audio/')) {
+      const base64Data = Buffer.from(fileStream.data).toString('base64')
+      const dataUrl = `data:${mimeType};base64,${base64Data}`
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Player - ${req.params.filename}</title>
+        </head>
+        <body style="background:#000;display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
+          ${mimeType.startsWith('video/')
+            ? `<video controls style="max-width:100%;max-height:100%"><source src="${dataUrl}" type="${mimeType}"></video>`
+            : `<audio controls style="width:100%"><source src="${dataUrl}" type="${mimeType}"></audio>`}
+        </body>
+        </html>
+      `)
+    }
+
+    res.setHeader('Content-Type', mimeType)
+    if (mimeType.startsWith('image/') || mimeType.startsWith('text/') || mimeType === 'application/pdf') {
+      res.setHeader('Content-Disposition', 'inline')
+    } else {
+      res.setHeader('Content-Disposition', `attachment; filename="${req.params.filename}"`)
+    }
+    res.send(Buffer.from(fileStream.data))
+  } catch (err) {
+    if (err.response?.status === 404) {
+      res.status(404).send('File tidak ditemukan.')
+    } else {
+      console.error(err.message)
+      res.status(500).send('Gagal mengambil file dari server.')
+    }
+  }
+})
+
+app.listen(port, async () => {
+  await ensureUploadsFolder()
+  console.log(`Server running at ${domain} or http://localhost:${port}`)
+})
